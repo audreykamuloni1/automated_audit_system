@@ -1,16 +1,13 @@
 import sys
 import os
-import csv
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTableView, QVBoxLayout, QHBoxLayout,
-    QWidget, QPushButton, QHeaderView, QDialog, QLabel, QFileDialog
+    QApplication, QMainWindow, QTableView, QVBoxLayout,
+    QWidget, QPushButton, QHeaderView, QDialog, QLabel
 )
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtCore import Qt
 
 from rules.rule_engine import get_alerts, run_rules
-from gui.rule_management_window import RuleManagementWindow
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,24 +21,16 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(central_widget)
 
         # --- Control Buttons ---
-        controls_layout = QHBoxLayout()
+        controls_layout = QVBoxLayout()
 
-        self.manage_rules_button = QPushButton("Manage Rules")
-        self.manage_rules_button.clicked.connect(self.open_rule_manager)
-
-        self.run_rules_button = QPushButton("Run Compliance Checks")
+        self.run_rules_button = QPushButton("1. Run Compliance Checks")
         self.run_rules_button.clicked.connect(self.run_compliance_checks)
 
-        self.refresh_button = QPushButton("Refresh Alerts View")
+        self.refresh_button = QPushButton("2. Refresh Alerts View")
         self.refresh_button.clicked.connect(self.load_alerts)
 
-        self.export_button = QPushButton("Export Alerts to CSV")
-        self.export_button.clicked.connect(self.export_alerts_to_csv)
-
-        controls_layout.addWidget(self.manage_rules_button)
         controls_layout.addWidget(self.run_rules_button)
         controls_layout.addWidget(self.refresh_button)
-        controls_layout.addWidget(self.export_button)
 
         layout.addLayout(controls_layout)
 
@@ -49,6 +38,10 @@ class MainWindow(QMainWindow):
         self.alerts_table = QTableView()
         self.alerts_model = QStandardItemModel()
         self.alerts_table.setModel(self.alerts_model)
+
+        # Set table headers
+        headers = ["ID", "Timestamp", "Rule ID", "Description", "User ID", "Action", "Resource"]
+        self.alerts_model.setHorizontalHeaderLabels(headers)
 
         # Style the table
         self.alerts_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -60,12 +53,6 @@ class MainWindow(QMainWindow):
 
         # Initial load of alerts
         self.load_alerts()
-
-    def open_rule_manager(self):
-        """Opens the rule management window."""
-        # We store it as an attribute to prevent it from being garbage collected
-        self.rule_window = RuleManagementWindow(self)
-        self.rule_window.show()
 
     def show_message_dialog(self, title, message):
         """Helper function to show a simple message box."""
@@ -86,11 +73,7 @@ class MainWindow(QMainWindow):
     def load_alerts(self):
         """Fetches alerts from the database and populates the table."""
         print("Loading alerts into GUI...")
-        self.alerts_model.clear() # Clear existing data
-
-        # Set table headers
-        headers = ["ID", "Timestamp", "Rule Name", "Description", "User ID", "Action", "Resource"]
-        self.alerts_model.setHorizontalHeaderLabels(headers)
+        self.alerts_model.removeRows(0, self.alerts_model.rowCount()) # Clear existing data
 
         alerts_data = get_alerts()
 
@@ -103,35 +86,6 @@ class MainWindow(QMainWindow):
             self.alerts_model.appendRow(items)
 
         print(f"Loaded {len(alerts_data)} alerts into the table.")
-
-    def export_alerts_to_csv(self):
-        """Exports the data from the alerts table to a CSV file."""
-        if self.alerts_model.rowCount() == 0:
-            self.show_message_dialog("Export Error", "There are no alerts to export.")
-            return
-
-        # Open file dialog to choose where to save the file
-        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
-
-        if not path:
-            return # User cancelled the dialog
-
-        try:
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-
-                # Write header
-                headers = [self.alerts_model.horizontalHeaderItem(i).text() for i in range(self.alerts_model.columnCount())]
-                writer.writerow(headers)
-
-                # Write data rows
-                for row in range(self.alerts_model.rowCount()):
-                    row_data = [self.alerts_model.item(row, col).text() for col in range(self.alerts_model.columnCount())]
-                    writer.writerow(row_data)
-
-            self.show_message_dialog("Export Successful", f"Alerts successfully exported to:\n{path}")
-        except Exception as e:
-            self.show_message_dialog("Export Error", f"An error occurred while exporting the file:\n{e}")
 
 def main():
     """Main function to run the application."""

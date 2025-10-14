@@ -1,13 +1,9 @@
 from datetime import datetime
-from db.database import get_db_connection, get_active_rules
-
-# Whitelist of allowed fields and operators to prevent SQL injection
-ALLOWED_TARGET_FIELDS = {'user_id', 'action', 'resource', 'status'}
-ALLOWED_OPERATORS = {'=', '!=', 'LIKE', 'IN'}
+from db.database import get_db_connection
 
 def run_rules():
     """
-    Runs all active compliance rules from the database against the logs
+    Runs predefined compliance rules against the logs in the database
     and stores any violations in the 'alerts' table.
     """
     conn = get_db_connection()
@@ -16,76 +12,61 @@ def run_rules():
         return
 
     alerts_generated = 0
-    active_rules = get_active_rules()
-
-    if not active_rules:
-        print("No active rules to run.")
-        return
-
     try:
         with conn.cursor() as cur:
-            for rule_id, rule_name, description, target_field, operator, value in active_rules:
-                # --- Security Check ---
-                if target_field not in ALLOWED_TARGET_FIELDS or operator not in ALLOWED_OPERATORS:
-                    print(f"Skipping rule '{rule_name}' due to invalid field or operator.")
-                    continue
+            # Rule 1: Flag unauthorized access attempts
+            rule_id = "unauthorized_access_attempt"
+            description = "A user attempted to access a resource they were not authorized for."
 
-                # --- Dynamic Query Construction ---
-                # This is safe because we've whitelisted the field and operator
-                sql_query = f"SELECT id, timestamp, user_id, resource FROM logs WHERE {target_field} {operator} %s"
+            cur.execute("""
+                SELECT id, timestamp, user_id, resource
+                FROM logs
+                WHERE status = 'unauthorized'
+            """)
 
-                # Find all logs that violate this rule
-                cur.execute(sql_query, (value,))
-                violating_logs = cur.fetchall()
+            unauthorized_logs = cur.fetchall()
 
-                for log_id, ts, user_id, resource in violating_logs:
-                    alert_ts = datetime.now()
-                    # The description is now simpler. The full, user-friendly description
-                    # will be constructed by get_alerts() by joining tables.
-                    alert_description = f"User '{user_id}' triggered rule '{rule_name}'"
-
-                    # Check if this specific alert (log_id + rule_id) already exists
+            for log_id, ts, user_id, resource in unauthorized_logs:
+                alert_ts = datetime.now()
+                # Check if this alert already exists to avoid duplicates
+                cur.execute(
+                    "SELECT id FROM alerts WHERE log_id = %s AND rule_id = %s",
+                    (log_id, rule_id)
+                )
+                if cur.fetchone() is None:
                     cur.execute(
-                        "SELECT id FROM alerts WHERE log_id = %s AND rule_id = %s",
-                        (log_id, rule_id)
+                        """
+                        INSERT INTO alerts (log_id, rule_id, timestamp, description)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (log_id, rule_id, alert_ts, f"{description} User: {user_id}, Resource: {resource}")
                     )
-                    if cur.fetchone() is None:
-                        # Insert a new alert if it doesn't exist
-                        cur.execute(
-                            """
-                            INSERT INTO alerts (log_id, rule_id, timestamp, description)
-                            VALUES (%s, %s, %s, %s)
-                            """,
-                            (log_id, rule_id, alert_ts, alert_description)
-                        )
-                        alerts_generated += 1
+                    alerts_generated += 1
+
+            # Add more rules here in the future...
+            # For example, rule for multiple failed logins, etc.
 
             conn.commit()
-        print(f"Rule engine finished. Generated {alerts_generated} new alerts based on {len(active_rules)} active rules.")
+        print(f"Rule engine finished. Generated {alerts_generated} new alerts.")
     except Exception as e:
-        print(f"Error running dynamic rule engine: {e}")
+        print(f"Error running rule engine: {e}")
         conn.rollback()
     finally:
         if conn:
             conn.close()
 
 def get_alerts():
-    """
-    Retrieves all alerts from the database, joining with logs and rules
-    to get human-readable information.
-    """
+    """Retrieves all alerts from the database."""
     conn = get_db_connection()
     if not conn:
         return []
 
     try:
         with conn.cursor() as cur:
-            # Join with the rules table to get the rule name
             cur.execute("""
-                SELECT a.id, a.timestamp, r.name, a.description, l.user_id, l.action, l.resource
+                SELECT a.id, a.timestamp, a.rule_id, a.description, l.user_id, l.action, l.resource
                 FROM alerts a
                 JOIN logs l ON a.log_id = l.id
-                JOIN rules r ON a.rule_id = r.id
                 ORDER BY a.timestamp DESC
             """)
             return cur.fetchall()
@@ -97,14 +78,14 @@ def get_alerts():
             conn.close()
 
 if __name__ == '__main__':
-    print("Running dynamic compliance rule engine...")
+    # This allows running the script directly to check for alerts
+    print("Running compliance rule engine...")
     run_rules()
 
     print("\nFetching current alerts:")
     alerts = get_alerts()
     if alerts:
         for alert in alerts:
-            # (alert_id, timestamp, rule_name, description, user_id, action, resource)
-            print(f"Alert ID: {alert[0]}, Rule: '{alert[2]}', User: {alert[4]}, Action: {alert[5]}")
+            print(alert)
     else:
         print("No alerts found.")
