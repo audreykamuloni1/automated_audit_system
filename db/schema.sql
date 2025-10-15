@@ -1,8 +1,10 @@
 -- Drop tables if they exist to ensure a clean setup
-DROP TABLE IF EXISTS anomalies;
-DROP TABLE IF EXISTS alerts;
-DROP TABLE IF EXISTS logs;
-DROP TABLE IF EXISTS rules;
+-- The CASCADE option will automatically drop any dependent objects
+DROP TABLE IF EXISTS rule_conditions CASCADE;
+DROP TABLE IF EXISTS anomalies CASCADE;
+DROP TABLE IF EXISTS alerts CASCADE;
+DROP TABLE IF EXISTS logs CASCADE;
+DROP TABLE IF EXISTS rules CASCADE;
 
 -- Create logs table to store ingested log data
 CREATE TABLE logs (
@@ -29,7 +31,7 @@ CREATE TABLE rules (
 CREATE TABLE alerts (
     id SERIAL PRIMARY KEY,
     log_id INTEGER REFERENCES logs(id) ON DELETE CASCADE,
-    rule_id INTEGER REFERENCES rules(id) ON DELETE CASCADE, -- CORRECTED: This is now an INTEGER
+    rule_id INTEGER REFERENCES rules(id) ON DELETE CASCADE,
     timestamp TIMESTAMP NOT NULL,
     description TEXT
 );

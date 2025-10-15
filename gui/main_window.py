@@ -1,187 +1,146 @@
 import sys
-import os
-import csv
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTableView, QVBoxLayout, QHBoxLayout,
-    QWidget, QPushButton, QHeaderView, QDialog, QLabel, QFileDialog, QTabWidget
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QLabel, QTableView, QSplitter, QFrame, QHeaderView, QScrollArea, QPushButton
 )
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtCore import Qt, QThread
+from PyQt5.QtCore import Qt
 
-from rules.rule_engine import get_alerts, run_rules
-from gui.rule_management_window import RuleManagementWindow
-from gui.anomaly_panel import AnomalyPanel
-from ml.ml_worker import MLWorker
-from ml.anomaly_detector import get_anomalies
+from db import get_all_logs, get_unified_alerts
+from gui.alert_card import AlertCard
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Intelligent Audit System")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle("Server Anomaly Detection Dashboard")
+        self.setGeometry(100, 100, 1600, 900)
+
+        # Load the stylesheet
+        try:
+            with open("gui/stylesheet.qss", "r") as f:
+                self.setStyleSheet(f.read())
+        except FileNotFoundError:
+            print("Stylesheet not found. Using default styles.")
 
         # --- Main Layout ---
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # --- Tab Widget for different sections ---
-        self.tabs = QTabWidget()
-        main_layout.addWidget(self.tabs)
+        # --- Header ---
+        header = QWidget()
+        header.setFixedHeight(60)
+        header_layout = QHBoxLayout(header)
+        header.setObjectName("Header")
 
-        # --- Tab 1: Rule-Based Alerts ---
-        self.alerts_tab = QWidget()
-        alerts_layout = QVBoxLayout(self.alerts_tab)
-        self.tabs.addTab(self.alerts_tab, "Rule-Based Alerts")
+        title = QLabel("Server Anomaly Detection Dashboard")
+        title_font = title.font()
+        title_font.setPointSize(18)
+        title_font.setBold(True)
+        title.setFont(title_font)
 
-        # Controls for Alerts Tab
-        alerts_controls_layout = QHBoxLayout()
-        self.manage_rules_button = QPushButton("Manage Rules")
-        self.run_rules_button = QPushButton("Run Compliance Checks")
-        self.refresh_alerts_button = QPushButton("Refresh Alerts View")
-        self.export_alerts_button = QPushButton("Export Alerts to CSV")
-        alerts_controls_layout.addWidget(self.manage_rules_button)
-        alerts_controls_layout.addWidget(self.run_rules_button)
-        alerts_controls_layout.addWidget(self.refresh_alerts_button)
-        alerts_controls_layout.addWidget(self.export_alerts_button)
-        alerts_layout.addLayout(alerts_controls_layout)
+        self.refresh_button = QPushButton("⟳ Refresh")
+        self.refresh_button.setFixedWidth(120)
 
-        # Table for Alerts
-        self.alerts_table = QTableView()
-        self.alerts_model = QStandardItemModel()
-        self.alerts_table.setModel(self.alerts_model)
-        self.style_table(self.alerts_table)
-        alerts_layout.addWidget(self.alerts_table)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        header_layout.addWidget(self.refresh_button)
+        main_layout.addWidget(header)
 
-        # --- Tab 2: Anomaly Detection ---
-        self.anomaly_tab = AnomalyPanel()
-        self.tabs.addTab(self.anomaly_tab, "ML Anomaly Detection")
+        # --- Body (Splitter Layout) ---
+        body_widget = QWidget()
+        body_layout = QHBoxLayout(body_widget)
+        body_layout.setContentsMargins(10, 10, 10, 10)
 
-        # --- Initial Load and Connections ---
-        self.load_alerts()
-        self.load_anomalies() # Load existing anomalies on startup
+        splitter = QSplitter(Qt.Horizontal)
+
+        # --- Left Pane: Real-Time Access Logs ---
+        logs_container = QFrame()
+        logs_layout = QVBoxLayout(logs_container)
+        logs_layout.addWidget(QLabel("Real-Time Access Logs"))
+        self.logs_table = QTableView()
+        self.logs_model = QStandardItemModel()
+        self.logs_table.setModel(self.logs_model)
+        logs_layout.addWidget(self.logs_table)
+
+        # --- Right Pane: Security Alerts ---
+        alerts_container = QFrame()
+        alerts_container_layout = QVBoxLayout(alerts_container)
+        alerts_container_layout.addWidget(QLabel("Security Alerts"))
+
+        # Scroll Area for alert cards
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.scroll_content = QWidget()
+        self.alerts_layout = QVBoxLayout(self.scroll_content)
+        self.alerts_layout.setAlignment(Qt.AlignTop)
+        self.alerts_layout.setSpacing(10)
+
+        self.scroll_area.setWidget(self.scroll_content)
+        alerts_container_layout.addWidget(self.scroll_area)
+
+        splitter.addWidget(logs_container)
+        splitter.addWidget(alerts_container)
+        splitter.setSizes([1000, 600]) # Initial size ratio
+
+        body_layout.addWidget(splitter)
+        main_layout.addWidget(body_widget)
+
         self.connect_signals()
-
-    def style_table(self, table):
-        """Applies common styling to a QTableView."""
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.setEditTriggers(QTableView.NoEditTriggers)
-        table.setSelectionBehavior(QTableView.SelectRows)
-        table.setSortingEnabled(True)
+        self.load_initial_data()
 
     def connect_signals(self):
-        """Connects all the application's signals to their slots."""
-        # Rule-based alert signals
-        self.manage_rules_button.clicked.connect(self.open_rule_manager)
-        self.run_rules_button.clicked.connect(self.run_compliance_checks)
-        self.refresh_alerts_button.clicked.connect(self.load_alerts)
-        self.export_alerts_button.clicked.connect(self.export_alerts_to_csv)
+        """Connects signals to slots."""
+        self.refresh_button.clicked.connect(self.load_initial_data)
 
-        # Anomaly detection signals
-        self.anomaly_tab.run_button.clicked.connect(self.start_ml_worker)
+    def load_initial_data(self):
+        """Loads all necessary data on startup."""
+        print("Refreshing all data...")
+        self.load_logs_into_table()
+        self.load_alerts_into_cards()
 
-    def start_ml_worker(self):
-        """
-        Initializes and starts the MLWorker in a new thread.
-        """
-        self.thread = QThread()
-        self.worker = MLWorker()
-        self.worker.moveToThread(self.thread)
+    def load_logs_into_table(self):
+        """Fetches all logs and populates the left-hand table."""
+        self.logs_model.clear()
+        headers = ["Status", "Timestamp", "User", "Source IP", "Action"]
+        self.logs_model.setHorizontalHeaderLabels(headers)
 
-        # Connect worker signals to GUI slots
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.worker.progress.connect(lambda msg: self.anomaly_tab.set_status(msg, is_busy=True))
-        self.worker.results_ready.connect(self.on_ml_results_ready)
-
-        # Start the thread
-        self.thread.start()
-
-        # Update GUI to show it's busy
-        self.anomaly_tab.set_status("Starting ML pipeline...", is_busy=True)
-
-    def on_ml_results_ready(self, results):
-        """
-        Slot to handle the results from the ML worker.
-
-        Args:
-            results (list): The list of anomalies detected by the model.
-        """
-        self.anomaly_tab.populate_results(results)
-        self.anomaly_tab.set_status(f"Analysis complete. Found {len(results)} anomalies.", is_busy=False)
-
-    def open_rule_manager(self):
-        """Opens the rule management window."""
-        self.rule_window = RuleManagementWindow(self)
-        self.rule_window.show()
-
-    def show_message_dialog(self, title, message):
-        """Helper function to show a simple message box."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle(title)
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel(message))
-        dialog.setLayout(layout)
-        dialog.exec_()
-
-    def run_compliance_checks(self):
-        """Handler for the 'Run Compliance Checks' button."""
-        print("Running compliance checks from GUI...")
-        run_rules()
-        self.show_message_dialog("Rule Engine", "Compliance checks are complete. Refresh the view to see new alerts.")
-        self.load_alerts()
-
-    def load_alerts(self):
-        """Fetches alerts from the database and populates the table."""
-        print("Loading alerts into GUI...")
-        self.alerts_model.clear()
-        headers = ["ID", "Timestamp", "Rule Name", "Description", "User ID", "Action", "Resource"]
-        self.alerts_model.setHorizontalHeaderLabels(headers)
-
-        alerts_data = get_alerts()
-
-        if not alerts_data:
-            print("No alerts found.")
-            return
-
-        for row_data in alerts_data:
+        logs_data = get_all_logs()
+        for row_data in logs_data:
             items = [QStandardItem(str(field)) for field in row_data]
-            self.alerts_model.appendRow(items)
+            self.logs_model.appendRow(items)
 
-        print(f"Loaded {len(alerts_data)} alerts into the table.")
+        self.logs_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.logs_table.resizeColumnsToContents()
 
-    def load_anomalies(self):
-        """Fetches anomalies from the database and populates the anomaly table."""
-        print("Loading anomalies into GUI...")
-        anomalies_data = get_anomalies()
-        self.anomaly_tab.populate_results(anomalies_data)
+    def load_alerts_into_cards(self):
+        """Fetches unified alerts and populates the right-hand panel with AlertCard widgets."""
+        # Clear existing cards
+        for i in reversed(range(self.alerts_layout.count())):
+            widget = self.alerts_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.deleteLater()
 
-    def export_alerts_to_csv(self):
-        """Exports the data from the alerts table to a CSV file."""
-        if self.alerts_model.rowCount() == 0:
-            self.show_message_dialog("Export Error", "There are no alerts to export.")
+        unified_alerts = get_unified_alerts()
+
+        if not unified_alerts:
+            self.alerts_layout.addWidget(QLabel("No security alerts found."))
             return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
-
-        if not path:
-            return
-
-        try:
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                headers = [self.alerts_model.horizontalHeaderItem(i).text() for i in range(self.alerts_model.columnCount())]
-                writer.writerow(headers)
-                for row in range(self.alerts_model.rowCount()):
-                    row_data = [self.alerts_model.item(row, col).text() for col in range(self.alerts_model.columnCount())]
-                    writer.writerow(row_data)
-            self.show_message_dialog("Export Successful", f"Alerts successfully exported to:\n{path}")
-        except Exception as e:
-            self.show_message_dialog("Export Error", f"An error occurred while exporting the file:\n{e}")
+        for alert_data in unified_alerts:
+            card = AlertCard(
+                severity=alert_data['severity'],
+                alert_type=alert_data['type'],
+                description=alert_data['description'],
+                timestamp=str(alert_data['timestamp']),
+                log_id=alert_data['id']
+            )
+            self.alerts_layout.addWidget(card)
 
 def main():
     """Main function to run the application."""
