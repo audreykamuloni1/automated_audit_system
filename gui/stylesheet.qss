@@ -1,0 +1,117 @@
+/* General Window Styling */
+QMainWindow, QDialog {
+    background-color: #1a1a2e; /* Dark blue-purple background */
+    color: #e0e0e0; /* Light grey text */
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* Main Content Widget */
+QWidget {
+    background-color: #1a1a2e;
+    color: #e0e0e0;
+}
+
+/* Labels */
+QLabel {
+    color: #f0f0f0;
+    font-size: 14px;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #4a4a70; /* Muted purple */
+    color: #ffffff;
+    border: 1px solid #6a6a90;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+QPushButton:hover {
+    background-color: #6a6a90; /* Lighter purple on hover */
+}
+
+QPushButton:pressed {
+    background-color: #3a3a60; /* Darker purple when pressed */
+}
+
+QPushButton:disabled {
+    background-color: #2a2a40;
+    color: #808080;
+}
+
+/* Table View */
+QTableView {
+    background-color: #161625; /* Even darker background for tables */
+    border: 1px solid #4a4a70;
+    gridline-color: #4a4a70;
+    color: #e0e0e0;
+    font-size: 13px;
+    selection-background-color: #4a4a70; /* Color of selected row */
+    selection-color: #ffffff;
+}
+
+/* Table Header */
+QHeaderView::section {
+    background-color: #2a2a50; /* Header background */
+    color: #ffffff;
+    padding: 6px;
+    border: 1px solid #4a4a70;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* Scroll Bars */
+QScrollBar:vertical {
+    border: none;
+    background-color: #161625;
+    width: 12px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #4a4a70;
+    min-height: 20px;
+    border-radius: 6px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #161625;
+    height: 12px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #4a4a70;
+    min-width: 20px;
+    border-radius: 6px;
+}
+
+/* Scroll Area */
+QScrollArea {
+    border: none;
+}
+
+/* Custom Alert Card Colors - will be set via code, but good to have placeholders */
+.AlertCard[severity="Medium"] {
+    border-left: 5px solid #f7b731; /* Yellow */
+}
+.AlertCard[severity="High"] {
+    border-left: 5px solid #e74c3c; /* Red */
+}
+.AlertCard[severity="Low"] {
+    border-left: 5px solid #2ecc71; /* Green */
+}
+.AlertCard {
+    background-color: #2e2e4f;
+    border-radius: 5px;
+}
