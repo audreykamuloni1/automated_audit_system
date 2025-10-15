@@ -16,7 +16,7 @@ def run_rules():
         with conn.cursor() as cur:
             # Rule 1: Flag unauthorized access attempts
             rule_id = "unauthorized_access_attempt"
-            description = "A user attempted to access a resource they were not authorized for."
+            description = "Unauthorized access detected. A user attempted to access a resource they were not authorized for."
 
             cur.execute("""
                 SELECT id, timestamp, user_id, resource
@@ -28,7 +28,6 @@ def run_rules():
 
             for log_id, ts, user_id, resource in unauthorized_logs:
                 alert_ts = datetime.now()
-                # Check if this alert already exists to avoid duplicates
                 cur.execute(
                     "SELECT id FROM alerts WHERE log_id = %s AND rule_id = %s",
                     (log_id, rule_id)
@@ -43,8 +42,60 @@ def run_rules():
                     )
                     alerts_generated += 1
 
-            # Add more rules here in the future...
-            # For example, rule for multiple failed logins, etc.
+            # Rule 2: Admin Action on Sensitive DB
+            rule_id = "admin_action_sensitive_db"
+            description = "Admin performed an action on a sensitive database."
+
+            cur.execute("""
+                SELECT id, timestamp, user_id, resource
+                FROM logs
+                WHERE user_id LIKE 'admin-%' AND resource = 'sensitive-db'
+            """)
+            admin_logs = cur.fetchall()
+            for log_id, ts, user_id, resource in admin_logs:
+                alert_ts = datetime.now()
+                cur.execute(
+                    "SELECT id FROM alerts WHERE log_id = %s AND rule_id = %s",
+                    (log_id, rule_id)
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        """
+                        INSERT INTO alerts (log_id, rule_id, timestamp, description)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (log_id, rule_id, alert_ts, f"{description} User: {user_id}, Resource: {resource}")
+                    )
+                    alerts_generated += 1
+
+            # Rule 3: Multiple Failed Logins
+            rule_id = "multiple_failed_logins"
+            description = "Multiple failed login attempts detected."
+
+            cur.execute("""
+                SELECT user_id, COUNT(*) as fail_count
+                FROM logs
+                WHERE status = 'failed'
+                GROUP BY user_id
+                HAVING COUNT(*) >= 3
+            """)
+            failed_users = cur.fetchall()
+            for user_id, fail_count in failed_users:
+                alert_ts = datetime.now()
+                # For failed logins, log_id is not unique, so we set it to None
+                cur.execute(
+                    "SELECT id FROM alerts WHERE rule_id = %s AND description LIKE %s",
+                    (rule_id, f"%User: {user_id}%")
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        """
+                        INSERT INTO alerts (log_id, rule_id, timestamp, description)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (None, rule_id, alert_ts, f"{description} User: {user_id}, Failed Attempts: {fail_count}")
+                    )
+                    alerts_generated += 1
 
             conn.commit()
         print(f"Rule engine finished. Generated {alerts_generated} new alerts.")
@@ -78,7 +129,6 @@ def get_alerts():
             conn.close()
 
 if __name__ == '__main__':
-    # This allows running the script directly to check for alerts
     print("Running compliance rule engine...")
     run_rules()
 

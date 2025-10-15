@@ -21,7 +21,7 @@ def test_setup_database():
         setup_database()
     except Exception as e:
         pytest.fail(f"Database setup failed with an exception: {e}")
-
+    
     # Verify that tables were created
     conn = get_db_connection()
     assert conn is not None

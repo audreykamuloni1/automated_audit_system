@@ -21,6 +21,19 @@ CREATE TABLE alerts (
     description TEXT
 );
 
--- You can add indexes later for performance optimization
--- CREATE INDEX idx_logs_timestamp ON logs(timestamp);
--- CREATE INDEX idx_alerts_timestamp ON alerts(timestamp);
+CREATE TABLE IF NOT EXISTS rules (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    target_field VARCHAR(255) NOT NULL,
+    operator VARCHAR(20) NOT NULL,
+    value VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO rules (name, description, target_field, operator, value, is_active)
+VALUES
+('Unauthorized Access Attempt', 'Flags logs where status is unauthorized.', 'status', '=', 'unauthorized', TRUE),
+('Admin Action on Sensitive DB', 'Flags admin actions on sensitive-db.', 'user_id', 'LIKE', 'admin-%', TRUE),
+('Multiple Failed Logins', 'Flags users with 3 or more failed logins.', 'status', '=', 'failed', TRUE)
+ON CONFLICT DO NOTHING;
