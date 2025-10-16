@@ -53,7 +53,9 @@ def test_rule_crud_operations(db_setup_for_rules):
     )
     assert update_success, "Should be able to update the rule."
 
-    updated_rule = get_all_rules()[-1] # Assuming it's the last one for simplicity
+    updated_rules = get_all_rules()
+    # Find the specific rule by ID to verify
+    updated_rule = next((r for r in updated_rules if r[0] == rule_id), None)
     assert updated_rule[1] == "Updated Test Rule", "Rule name should be updated."
     assert updated_rule[6] is False, "Rule should be inactive."
 
@@ -66,17 +68,16 @@ def test_rule_crud_operations(db_setup_for_rules):
 
 def test_dynamic_rule_engine_execution(db_setup_for_rules):
     """Tests that the dynamic rule engine generates alerts based on active DB rules."""
-    # Run the dynamic rule engine
     run_rules()
-
-    # Fetch the alerts
     alerts = get_alerts()
 
-    # THE FIX IS HERE: The correct number of alerts is 9, not 8.
-    # 2 (unauthorized) + 4 (admin actions) + 3 (failed logins) = 9
-    assert len(alerts) == 9, "The dynamic rule engine should generate 9 alerts based on the 3 default rules."
+    # Based on the sample data and default rules:
+    # 2 for 'Unauthorized Access Attempt'
+    # 4 for 'Admin Action on Sensitive DB' (matches 'admin-01' and 'admin-02')
+    # 3 for 'Multiple Failed Logins'
+    # Total = 9
+    assert len(alerts) == 9, f"Expected 9 alerts, but got {len(alerts)}"
 
-    # Verify that all different rules were triggered
     triggered_rule_names = {alert[2] for alert in alerts}
     expected_rules = {
         "Unauthorized Access Attempt",

@@ -11,7 +11,6 @@ def fetch_logs_as_dataframe():
         return pd.DataFrame()
 
     try:
-        # Using pandas' read_sql for convenience
         df = pd.read_sql("SELECT * FROM logs ORDER BY timestamp", conn)
         return df
     except Exception as e:
@@ -23,15 +22,8 @@ def fetch_logs_as_dataframe():
 
 def preprocess_features(df):
     """
-    Takes a DataFrame of logs and converts categorical features into a numerical
-    format suitable for machine learning models.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame with log data.
-
-    Returns:
-        pd.DataFrame: A DataFrame with numerical features only.
-        pd.DataFrame: The original DataFrame with original index, for later reference.
+    Takes a DataFrame of logs and converts categorical and timestamp features
+    into a numerical format suitable for machine learning models.
     """
     if df.empty:
         return pd.DataFrame(), df
@@ -40,24 +32,24 @@ def preprocess_features(df):
     # Convert timestamp to numerical features
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df['hour_of_day'] = df['timestamp'].dt.hour
-    df['day_of_week'] = df['timestamp'].dt.dayofweek # Monday=0, Sunday=6
+    df['day_of_week'] = df['timestamp'].dt.dayofweek
 
-    # Keep original data for reference before dropping columns
+    # Keep original data for reference
     original_df = df.copy()
 
     # --- Feature Selection and Encoding ---
-    # Select features to be used by the model
     features_to_encode = ['user_id', 'action', 'resource', 'status']
     numerical_features = ['hour_of_day', 'day_of_week']
 
-    # Use one-hot encoding for categorical variables
-    # This creates new columns for each category (e.g., 'action_login', 'action_logout')
-    encoded_df = pd.get_dummies(df[features_to_encode], prefix=features_to_encode)
+    # One-hot encode categorical variables
+    encoded_df = pd.get_dummies(df[features_to_encode], prefix=features_to_encode, dtype=float)
 
-    # Combine numerical features with the new encoded features
+    # Combine numerical features with encoded features
     final_df = pd.concat([df[numerical_features], encoded_df], axis=1)
 
-    # Ensure all column names are strings (required by some ML libraries)
+    # THE FIX IS HERE: Ensure all columns are of a standard float type
+    final_df = final_df.astype(float)
+
     final_df.columns = final_df.columns.astype(str)
 
     print(f"Feature extraction complete. Shape of processed data: {final_df.shape}")
@@ -71,7 +63,7 @@ if __name__ == '__main__':
         processed_data, original_data = preprocess_features(logs_df)
         print("\nProcessed Data Head:")
         print(processed_data.head())
-        print("\nOriginal Data columns preserved for reference:")
-        print(original_data.head())
+        print("\nData Types:")
+        print(processed_data.dtypes)
     else:
         print("No logs found to process.")
